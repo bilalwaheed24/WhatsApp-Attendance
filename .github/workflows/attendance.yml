@@ -1,0 +1,37 @@
+name: WhatsApp Attendance
+
+on:
+  schedule:
+    - cron: '0 2 * * 1-5'   # Mon-Fri 2 AM UTC = 7 AM Pakistan (UTC+5)
+  workflow_dispatch:          # manual trigger for testing
+
+jobs:
+  send-attendance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore session cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: auth_info
+          key: wa-session-${{ github.run_id }}
+          restore-keys: wa-session-
+
+      - name: Bootstrap session from secret (first run only)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          echo "${{ secrets.WA_SESSION }}" | base64 -d | tar -xzf - || true
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Send attendance
+        env:
+          GROUP_JID: ${{ secrets.GROUP_JID }}
+        run: node send.js
