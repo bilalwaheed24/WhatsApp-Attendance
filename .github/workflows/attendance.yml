@@ -3,7 +3,7 @@ name: WhatsApp Attendance
 on:
   schedule:
     - cron: '0 2 * * 1-5'   # Mon-Fri 2 AM UTC = 7 AM Pakistan (UTC+5)
-  workflow_dispatch:          # manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   send-attendance:
@@ -23,10 +23,9 @@ jobs:
           key: wa-session-${{ github.run_id }}
           restore-keys: wa-session-
 
-      - name: Bootstrap session from secret (first run only)
+      - name: Bootstrap session from secret
         if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          echo "${{ secrets.WA_SESSION }}" | base64 -d | tar -xzf - || true
+        run: echo "${{ secrets.WA_SESSION }}" | base64 -d | tar -xzf - || true
 
       - name: Install dependencies
         run: npm install
@@ -35,3 +34,38 @@ jobs:
         env:
           GROUP_JID: ${{ secrets.GROUP_JID }}
         run: node send.js
+
+      - name: Refresh WA_SESSION secret
+        if: success()
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          pip install pynacl -q
+          python3 << 'PYEOF'
+          import base64, json, subprocess, urllib.request, os
+          from nacl import public
+
+          repo = os.environ['REPO']
+          pat  = os.environ['PAT_TOKEN']
+          headers = {'Authorization': f'token {pat}', 'User-Agent': 'wa-bot',
+                     'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'}
+
+          def api(method, path, body=None):
+              req = urllib.request.Request(f'https://api.github.com{path}',
+                    data=json.dumps(body).encode() if body else None,
+                    headers=headers, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          try:
+              kd = api('GET', f'/repos/{repo}/actions/secrets/public-key')
+              pk = public.PublicKey(base64.b64decode(kd['key']))
+              box = public.SealedBox(pk)
+              encoded = subprocess.check_output('tar -czf - auth_info/ | base64 -w 0', shell=True).decode().strip()
+              enc = base64.b64encode(box.encrypt(encoded.encode())).decode()
+              api('PUT', f'/repos/{repo}/actions/secrets/WA_SESSION', {'encrypted_value': enc, 'key_id': kd['key_id']})
+              print('[SESSION] WA_SESSION refreshed successfully')
+          except Exception as e:
+              print(f'[SESSION] Refresh failed (non-fatal): {e}')
+          PYEOF
