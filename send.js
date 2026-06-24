@@ -26,16 +26,19 @@ async function send() {
 
     await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Timeout 45s')), 45000);
+        let sent = false;
 
         sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
             if (connection === 'open') {
                 const msg = getMessage();
                 await sock.sendMessage(GROUP_JID, { text: msg });
                 console.log(`[OK] SENT: "${msg}"`);
+                sent = true;
                 clearTimeout(timeout);
                 setTimeout(() => { sock.end(); resolve(); }, 3000);
             }
             if (connection === 'close') {
+                if (sent) return; // normal close after send — ignore
                 clearTimeout(timeout);
                 const code = lastDisconnect?.error?.output?.statusCode;
                 if (code === DisconnectReason.loggedOut) {
