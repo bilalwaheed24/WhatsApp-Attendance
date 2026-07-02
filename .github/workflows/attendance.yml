@@ -86,7 +86,7 @@ jobs:
           echo "Sending WhatsApp attendance message..."
           echo "═══════════════════════════════════════"
           
-          if timeout 45 node send.js; then
+          if timeout 60 node send.js; then
             echo "═══════════════════════════════════════"
             echo "✓ Message sent successfully"
             echo "═══════════════════════════════════════"

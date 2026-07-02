@@ -118,8 +118,8 @@ async function send() {
     await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             sock.end();
-            reject(new Error('Timeout 45s - no connection established'));
-        }, 45000);
+            reject(new Error('Timeout 60s - no connection established'));
+        }, 60000);
         let sent = false;
         let connected = false;
 
