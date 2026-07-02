@@ -22,16 +22,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Restore session from secret
+      - name: Restore session
         env:
           WA_SESSION: ${{ secrets.WA_SESSION }}
         run: |
-          if [ -z "$WA_SESSION" ]; then
-            echo "WA_SESSION secret is not set"
+          mkdir -p auth_info
+          if [ -n "$WA_SESSION" ]; then
+            printf '%s' "$WA_SESSION" | base64 -d > session.tar.gz
+          elif [ -f session_b64.txt ]; then
+            cat session_b64.txt > session.tar.gz.base64
+            base64 -d session.tar.gz.base64 > session.tar.gz
+          else
+            echo "No WhatsApp session available"
             exit 1
           fi
-          mkdir -p auth_info
-          printf '%s' "$WA_SESSION" | base64 -d > session.tar.gz
           tar -xzf session.tar.gz -C .
 
       - name: Send attendance
