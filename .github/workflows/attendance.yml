@@ -41,4 +41,5 @@ jobs:
       - name: Send attendance
         env:
           GROUP_JID: ${{ secrets.GROUP_JID }}
+          WA_SESSION: ${{ secrets.WA_SESSION }}
         run: node send.js
