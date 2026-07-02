@@ -117,14 +117,15 @@ This document lists all possible failure points in the WhatsApp Attendance workf
 - **Prevention:** Regenerate session if this occurs
 
 ### 10. **Timeout Issues**
-**Symptoms:** `Timeout 45s - no connection established`
-- **Cause:** WhatsApp connection takes too long (network latency, rate limiting)
-- **Detection:** send.js has 45-second timeout, workflow has 5-minute total timeout
+**Symptoms:** `Process completed with exit code 124.` (GitHub error)
+- **Cause:** WhatsApp connection takes longer than expected on GitHub runners
+- **Detection:** send.js has 60-second timeout, workflow timeout command uses 60 seconds
 - **Fix Applied:**
+  - Increased from 45 seconds to 60 seconds for GitHub runner compatibility
   - Clear error message for timeout
   - Proper cleanup on timeout
-  - Workflow timeout: 5 minutes total, 2 minutes for send step
-- **Prevention:** If frequent, increase timeout in send.js
+  - Workflow timeout: 5 minutes total, 60 seconds for send step
+- **Prevention:** GitHub runners are slower than local machines; 60 seconds is minimum safe timeout
 
 ---
 
@@ -216,6 +217,15 @@ This document lists all possible failure points in the WhatsApp Attendance workf
   - Cleanup happens in workflow (rm session.tar.gz)
   - GitHub Actions cleans runner between runs
 - **Prevention:** Always use runner cleanup
+
+### 17b. **Exit Code 124 (Timeout Kill)**
+**Symptoms:** `Process completed with exit code 124.`
+- **Cause:** `timeout` command killed the process (45s timeout too short)
+- **Detection:** Increased timeout to 60 seconds
+- **Fix Applied:**
+  - Workflow now uses `timeout 60` instead of `timeout 30`
+  - send.js internal timeout increased from 45000ms to 60000ms
+- **Prevention:** GitHub runners are slower; always test timeout values
 
 ### 18. **Logging Issues**
 **Symptoms:** Cannot debug failures
