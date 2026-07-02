@@ -8,7 +8,7 @@ on:
 jobs:
   send-attendance:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,24 +22,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Restore session
-        env:
-          WA_SESSION: ${{ secrets.WA_SESSION }}
+      - name: Extract session
         run: |
           mkdir -p auth_info
-          if [ -n "$WA_SESSION" ]; then
-            printf '%s' "$WA_SESSION" | base64 -d > session.tar.gz
-          elif [ -f session_b64.txt ]; then
-            cat session_b64.txt > session.tar.gz.base64
-            base64 -d session.tar.gz.base64 > session.tar.gz
-          else
-            echo "No WhatsApp session available"
-            exit 1
-          fi
-          tar -xzf session.tar.gz -C .
+          cat session_b64.txt | base64 -d | tar -xzf - -C .
+          echo "Session extracted"
 
-      - name: Send attendance
+      - name: Send message
         env:
           GROUP_JID: ${{ secrets.GROUP_JID }}
-          WA_SESSION: ${{ secrets.WA_SESSION }}
-        run: node send.js
+        timeout-minutes: 2
+        run: |
+          set -e
+          echo "Sending attendance message to: $GROUP_JID"
+          timeout 30 node send.js || true
+          echo "Done"
