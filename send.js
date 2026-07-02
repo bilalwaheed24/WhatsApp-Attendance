@@ -140,7 +140,7 @@ async function send() {
                     console.log(`[OK] SENT: "${msg}"`);
                     sent = true;
                     clearTimeout(timeout);
-                    setTimeout(() => { sock.end(); resolve(); }, 2000);
+                    setTimeout(() => { sock.end(); process.exit(0); }, 1000);
                 } catch (e) {
                     clearTimeout(timeout);
                     reject(new Error(`Failed to send message: ${e.message}`));
