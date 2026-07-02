@@ -13,6 +13,27 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.GROUP_JID }}" ]; then
+            echo "❌ FAIL: GROUP_JID secret is not set"
+            exit 1
+          fi
+          echo "✓ GROUP_JID secret is configured"
+
+      - name: Validate session file
+        run: |
+          if [ ! -f session_b64.txt ]; then
+            echo "❌ FAIL: session_b64.txt not found"
+            exit 1
+          fi
+          SIZE=$(wc -c < session_b64.txt)
+          if [ "$SIZE" -lt 1000 ]; then
+            echo "❌ FAIL: session_b64.txt too small (${SIZE} bytes)"
+            exit 1
+          fi
+          echo "✓ Session file found (${SIZE} bytes)"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -20,20 +41,59 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          echo "✓ Dependencies installed"
 
       - name: Extract session
         run: |
+          set -e
+          echo "Extracting WhatsApp session..."
           mkdir -p auth_info
-          cat session_b64.txt | base64 -d | tar -xzf - -C .
-          echo "Session extracted"
+          
+          # Validate base64
+          if ! base64 -d < session_b64.txt > session.tar.gz 2>/dev/null; then
+            echo "❌ FAIL: Base64 decode error - session file may be corrupted"
+            exit 1
+          fi
+          echo "✓ Base64 decoded"
+          
+          # Validate tar
+          if ! tar -tzf session.tar.gz > /dev/null; then
+            echo "❌ FAIL: Invalid tar archive - session file corrupted"
+            exit 1
+          fi
+          echo "✓ Tar archive valid"
+          
+          # Extract
+          tar -xzf session.tar.gz -C .
+          rm session.tar.gz
+          
+          # Validate extracted files
+          if [ ! -f auth_info/creds.json ]; then
+            echo "❌ FAIL: Missing creds.json - session extraction failed"
+            exit 1
+          fi
+          FILES=$(find auth_info -type f | wc -l)
+          echo "✓ Session extracted (${FILES} files)"
 
       - name: Send message
         env:
           GROUP_JID: ${{ secrets.GROUP_JID }}
-        timeout-minutes: 2
         run: |
           set -e
-          echo "Sending attendance message to: $GROUP_JID"
-          timeout 30 node send.js || true
-          echo "Done"
+          echo "═══════════════════════════════════════"
+          echo "Sending WhatsApp attendance message..."
+          echo "═══════════════════════════════════════"
+          
+          if timeout 45 node send.js; then
+            echo "═══════════════════════════════════════"
+            echo "✓ Message sent successfully"
+            echo "═══════════════════════════════════════"
+          else
+            EXIT_CODE=$?
+            echo "═══════════════════════════════════════"
+            echo "❌ FAIL: send.js exited with code ${EXIT_CODE}"
+            echo "═══════════════════════════════════════"
+            exit ${EXIT_CODE}
+          fi
