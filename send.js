@@ -1,8 +1,36 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const P = require('pino');
+const fs = require('fs');
+const { execFileSync } = require('child_process');
 
-const GROUP_JID = process.env.GROUP_JID;
-if (!GROUP_JID) { console.error('[ERROR] GROUP_JID not set'); process.exit(1); }
+const AUTH_DIR = 'auth_info';
+const SESSION_TAR = 'session.tar.gz';
+const GROUP_JID_FILE = '.group_jid';
+
+function ensureSessionRestored() {
+    if (fs.existsSync(AUTH_DIR) && fs.readdirSync(AUTH_DIR).length > 0) {
+        return;
+    }
+
+    const encoded = process.env.WA_SESSION?.trim();
+    if (!encoded) {
+        throw new Error('No WhatsApp session found. Restore auth_info/ or provide WA_SESSION secret');
+    }
+
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+    fs.writeFileSync(SESSION_TAR, Buffer.from(encoded, 'base64'));
+    execFileSync('tar', ['-xzf', SESSION_TAR, '-C', '.'], { stdio: 'inherit' });
+}
+
+function getGroupJid(fromEnv = process.env.GROUP_JID) {
+    if (fromEnv) return fromEnv;
+
+    if (fs.existsSync(GROUP_JID_FILE)) {
+        return fs.readFileSync(GROUP_JID_FILE, 'utf8').trim();
+    }
+
+    throw new Error('GROUP_JID not set. Provide GROUP_JID secret or create .group_jid');
+}
 
 function getMessage() {
     const day = new Date().toLocaleDateString('en-US', {
@@ -12,8 +40,11 @@ function getMessage() {
 }
 
 async function send() {
+    ensureSessionRestored();
+
+    const groupJid = getGroupJid();
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
     const sock = makeWASocket({
         version,
@@ -31,7 +62,7 @@ async function send() {
         sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
             if (connection === 'open') {
                 const msg = getMessage();
-                await sock.sendMessage(GROUP_JID, { text: msg });
+                await sock.sendMessage(groupJid, { text: msg });
                 console.log(`[OK] SENT: "${msg}"`);
                 sent = true;
                 clearTimeout(timeout);
@@ -51,4 +82,8 @@ async function send() {
     });
 }
 
-send().catch(e => { console.error('[FAIL]', e.message); process.exit(1); });
+if (require.main === module) {
+    send().catch(e => { console.error('[FAIL]', e.message); process.exit(1); });
+}
+
+module.exports = { ensureSessionRestored, getGroupJid, getMessage };
